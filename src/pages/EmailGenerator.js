@@ -3,6 +3,18 @@ import { useState } from "react";
 const AUDIENCES = ["Executive / C-Suite", "District Administrator", "IT Team", "End Users / Staff"];
 const STATUS_TYPES = ["On Track", "At Risk", "Delayed", "Completed"];
 
+async function callAI(prompt) {
+  const res = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, max_tokens: 1500 }),
+  });
+  if (!res.ok) throw new Error("API error: " + res.status);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.text;
+}
+
 export default function EmailGenerator() {
   const [loading, setLoading] = useState(false);
   const [emails, setEmails] = useState(null);
@@ -14,16 +26,12 @@ export default function EmailGenerator() {
   const generate = async () => {
     setLoading(true); setError(null);
     try {
-      const prompt = "You are a senior Program Manager. Generate tailored stakeholder emails for this project update. Project: " + form.project + " | Status: " + form.status + ". Update: " + form.update + ". Milestone: " + form.milestone + " | Blocker: " + (form.blocker || "None") + " | Next Steps: " + form.nextSteps + ". Return ONLY valid JSON (no markdown, no backticks): {" + '"emails":[{"audience":"Executive / C-Suite","subject":"...","body":"...","tone":"Strategic"},{"audience":"District Administrator","subject":"...","body":"...","tone":"Operational"},{"audience":"IT Team","subject":"...","body":"...","tone":"Technical"},{"audience":"End Users / Staff","subject":"...","body":"...","tone":"Supportive"}]}' + "}";
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
-      });
-      const data = await res.json();
-      const text = data.content.map(i => i.text || "").join("");
-      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+      const prompt = "You are a senior Program Manager. Generate tailored stakeholder emails for: Project: " + form.project + " | Status: " + form.status + " | Update: " + form.update + " | Milestone: " + form.milestone + " | Blocker: " + (form.blocker || "None") + " | Next Steps: " + form.nextSteps + ". Return ONLY valid JSON: {\"emails\":[{\"audience\":\"Executive / C-Suite\",\"subject\":\"...\",\"body\":\"...\",\"tone\":\"Strategic\"},{\"audience\":\"District Administrator\",\"subject\":\"...\",\"body\":\"...\",\"tone\":\"Operational\"},{\"audience\":\"IT Team\",\"subject\":\"...\",\"body\":\"...\",\"tone\":\"Technical\"},{\"audience\":\"End Users / Staff\",\"subject\":\"...\",\"body\":\"...\",\"tone\":\"Supportive\"}]}";
+      const text = await callAI(prompt);
+      const clean = text.replace(/^```json|^```|```$/gm, "").trim();
+      const parsed = JSON.parse(clean);
       setEmails(parsed.emails); setActiveTab(0);
-    } catch (e) { setError("Generation failed — please try again."); }
+    } catch (e) { setError("Generation failed: " + e.message + ". Please try again."); }
     setLoading(false);
   };
 
@@ -39,7 +47,6 @@ export default function EmailGenerator() {
         </h1>
         <p style={{ color: "#8a8478", fontSize: 14, margin: 0 }}>One update — four perfectly tailored emails, instantly.</p>
       </div>
-
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28, alignItems: "start" }}>
         <div style={{ background: "#111118", border: "1px solid #ffffff10", borderRadius: 16, padding: 32 }}>
           <div style={{ display: "grid", gap: 18 }}>
@@ -78,15 +85,12 @@ export default function EmailGenerator() {
             {loading ? "⏳ Generating Emails..." : "Generate 4 Stakeholder Emails →"}
           </button>
         </div>
-
         <div>
           {!emails ? (
             <div style={{ background: "#111118", border: "1px dashed #ffffff15", borderRadius: 16, padding: 60, textAlign: "center", color: "#8a8478" }}>
               <div style={{ fontSize: 40, marginBottom: 16 }}>📧</div>
               <div style={{ fontSize: 15, marginBottom: 8, color: "#c8c4b9" }}>4 tailored emails, instantly</div>
-              <div style={{ fontSize: 12, lineHeight: 1.6 }}>
-                {AUDIENCES.map((a, i) => <div key={i}>· {a}</div>)}
-              </div>
+              <div style={{ fontSize: 12, lineHeight: 1.6 }}>{AUDIENCES.map((a, i) => <div key={i}>· {a}</div>)}</div>
             </div>
           ) : (
             <div style={{ background: "#111118", border: "1px solid #ffffff10", borderRadius: 16, overflow: "hidden" }}>
@@ -104,8 +108,7 @@ export default function EmailGenerator() {
                     <div style={{ fontSize: 10, color: "#00b4d8", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 3 }}>{emails[activeTab].audience}</div>
                     <div style={{ fontSize: 11, color: "#8a8478" }}>Tone: <span style={{ color: "#ffd460" }}>{emails[activeTab].tone}</span></div>
                   </div>
-                  <button onClick={copy}
-                    style={{ padding: "7px 14px", background: copied ? "#00b4d820" : "transparent", border: "1px solid " + (copied ? "#00b4d8" : "#ffffff20"), borderRadius: 6, color: copied ? "#00b4d8" : "#8a8478", cursor: "pointer", fontSize: 11 }}>
+                  <button onClick={copy} style={{ padding: "7px 14px", background: copied ? "#00b4d820" : "transparent", border: "1px solid " + (copied ? "#00b4d8" : "#ffffff20"), borderRadius: 6, color: copied ? "#00b4d8" : "#8a8478", cursor: "pointer", fontSize: 11 }}>
                     {copied ? "✓ Copied!" : "Copy"}
                   </button>
                 </div>
