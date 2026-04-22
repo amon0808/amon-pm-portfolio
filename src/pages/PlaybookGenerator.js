@@ -3,6 +3,18 @@ import { useState } from "react";
 const PHASES = ["Discovery", "Configuration", "Training", "Go-Live", "Post-Launch"];
 const PHASE_ICONS = ["🔍", "⚙️", "🎓", "🚀", "📈"];
 
+async function callAI(prompt) {
+  const res = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, max_tokens: 1500 }),
+  });
+  if (!res.ok) throw new Error("API error: " + res.status);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.text;
+}
+
 export default function PlaybookGenerator() {
   const [step, setStep] = useState("form");
   const [loading, setLoading] = useState(false);
@@ -14,16 +26,12 @@ export default function PlaybookGenerator() {
   const generate = async () => {
     setLoading(true); setError(null);
     try {
-      const prompt = "You are a senior SaaS Implementation Program Manager with 10+ years of experience. Generate a detailed implementation playbook for: Product: " + form.product + ", Industry: " + form.industry + ", Client Size: " + form.clientSize + ", Timeline: " + form.timeline + ", Stakeholders: " + form.stakeholders + ", Complexity: " + form.complexity + ". Return ONLY valid JSON (no markdown, no backticks): {" + '"title":"...","executive_summary":"2-3 sentences","success_metrics":["...","...","...","..."],"risks":[{"risk":"...","mitigation":"...","level":"High"},{"risk":"...","mitigation":"...","level":"Medium"},{"risk":"...","mitigation":"...","level":"Low"}],"phases":[{"name":"Discovery","duration":"X weeks","objective":"...","tasks":["...","...","...","..."],"deliverables":["...","...","..."],"stakeholders":["...","..."],"milestones":"..."},{"name":"Configuration","duration":"X weeks","objective":"...","tasks":["...","...","...","..."],"deliverables":["...","...","..."],"stakeholders":["...","..."],"milestones":"..."},{"name":"Training","duration":"X weeks","objective":"...","tasks":["...","...","...","..."],"deliverables":["...","...","..."],"stakeholders":["...","..."],"milestones":"..."},{"name":"Go-Live","duration":"X weeks","objective":"...","tasks":["...","...","...","..."],"deliverables":["...","...","..."],"stakeholders":["...","..."],"milestones":"..."},{"name":"Post-Launch","duration":"X weeks","objective":"...","tasks":["...","...","...","..."],"deliverables":["...","...","..."],"stakeholders":["...","..."],"milestones":"..."}]}' + "}";
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
-      });
-      const data = await res.json();
-      const text = data.content.map(i => i.text || "").join("");
-      setPlaybook(JSON.parse(text.replace(/```json|```/g, "").trim()));
+      const prompt = "You are a senior SaaS Implementation Program Manager with 10+ years of experience. Generate a detailed implementation playbook for: Product: " + form.product + ", Industry: " + form.industry + ", Client Size: " + form.clientSize + ", Timeline: " + form.timeline + ", Stakeholders: " + form.stakeholders + ", Complexity: " + form.complexity + ". Return ONLY valid JSON (no markdown, no backticks, no extra text): {\"title\":\"...\",\"executive_summary\":\"2-3 sentences\",\"success_metrics\":[\"...\",\"...\",\"...\",\"...\"],\"risks\":[{\"risk\":\"...\",\"mitigation\":\"...\",\"level\":\"High\"},{\"risk\":\"...\",\"mitigation\":\"...\",\"level\":\"Medium\"},{\"risk\":\"...\",\"mitigation\":\"...\",\"level\":\"Low\"}],\"phases\":[{\"name\":\"Discovery\",\"duration\":\"X weeks\",\"objective\":\"...\",\"tasks\":[\"...\",\"...\",\"...\",\"...\"],\"deliverables\":[\"...\",\"...\",\"...\"],\"stakeholders\":[\"...\",\"...\"],\"milestones\":\"...\"},{\"name\":\"Configuration\",\"duration\":\"X weeks\",\"objective\":\"...\",\"tasks\":[\"...\",\"...\",\"...\",\"...\"],\"deliverables\":[\"...\",\"...\",\"...\"],\"stakeholders\":[\"...\",\"...\"],\"milestones\":\"...\"},{\"name\":\"Training\",\"duration\":\"X weeks\",\"objective\":\"...\",\"tasks\":[\"...\",\"...\",\"...\",\"...\"],\"deliverables\":[\"...\",\"...\",\"...\"],\"stakeholders\":[\"...\",\"...\"],\"milestones\":\"...\"},{\"name\":\"Go-Live\",\"duration\":\"X weeks\",\"objective\":\"...\",\"tasks\":[\"...\",\"...\",\"...\",\"...\"],\"deliverables\":[\"...\",\"...\",\"...\"],\"stakeholders\":[\"...\",\"...\"],\"milestones\":\"...\"},{\"name\":\"Post-Launch\",\"duration\":\"X weeks\",\"objective\":\"...\",\"tasks\":[\"...\",\"...\",\"...\",\"...\"],\"deliverables\":[\"...\",\"...\",\"...\"],\"stakeholders\":[\"...\",\"...\"],\"milestones\":\"...\"}]}";
+      const text = await callAI(prompt);
+      const clean = text.replace(/^```json|^```|```$/gm, "").trim();
+      setPlaybook(JSON.parse(clean));
       setStep("result"); setActivePhase(0);
-    } catch (e) { setError("Generation failed — please try again."); }
+    } catch (e) { setError("Generation failed: " + e.message + ". Please try again."); }
     setLoading(false);
   };
 
@@ -89,7 +97,6 @@ export default function PlaybookGenerator() {
           ← New Playbook
         </button>
       </div>
-
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 10, marginBottom: 28 }}>
         {playbook.success_metrics && playbook.success_metrics.map((m, i) => (
           <div key={i} style={{ background: "#111118", border: "1px solid #e9456020", borderRadius: 10, padding: "14px 16px", borderLeft: "3px solid #e94560" }}>
@@ -98,7 +105,6 @@ export default function PlaybookGenerator() {
           </div>
         ))}
       </div>
-
       <div style={{ display: "flex", marginBottom: 20, background: "#111118", borderRadius: 12, border: "1px solid #ffffff10", overflow: "hidden" }}>
         {PHASES.map((phase, i) => (
           <button key={i} onClick={() => setActivePhase(i)}
@@ -107,7 +113,6 @@ export default function PlaybookGenerator() {
           </button>
         ))}
       </div>
-
       {playbook.phases && playbook.phases[activePhase] && (
         <div style={{ background: "#111118", border: "1px solid #ffffff10", borderRadius: 16, overflow: "hidden", marginBottom: 28 }}>
           <div style={{ background: "linear-gradient(135deg,#1a1a2e,#16213e)", borderBottom: "1px solid #e9456030", padding: "22px 28px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
@@ -146,7 +151,6 @@ export default function PlaybookGenerator() {
           </div>
         </div>
       )}
-
       {playbook.risks && playbook.risks.length > 0 && (
         <div>
           <div style={{ fontSize: 10, color: "#e94560", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 14 }}>Risk Register</div>
