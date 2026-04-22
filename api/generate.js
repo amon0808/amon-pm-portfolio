@@ -7,15 +7,25 @@ export default async function handler(req, res) {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'API key not configured. Please add GEMINI_API_KEY to Vercel environment variables.' });
+    return res.status(500).json({ error: 'GEMINI_API_KEY not set in Vercel environment variables.' });
   }
 
-  try {
-    const { prompt, max_tokens = 1500 } = req.body;
+  const { prompt, max_tokens = 1500 } = req.body;
 
-    const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + apiKey,
-      {
+  // Try models in order - gemini-2.0-flash is newest free tier
+  const models = [
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-latest',
+    'gemini-1.0-pro',
+  ];
+
+  let lastError = null;
+
+  for (const model of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -25,18 +35,20 @@ export default async function handler(req, res) {
             temperature: 0.7,
           },
         }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        const text = data.candidates[0].content.parts[0].text;
+        return res.status(200).json({ text, model });
       }
-    );
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: data.error?.message || 'Gemini API error' });
+      lastError = `${model}: ${response.status} - ${data.error?.message || 'no candidates'}`;
+    } catch (err) {
+      lastError = `${model}: ${err.message}`;
     }
-
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return res.status(200).json({ text });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
   }
+
+  return res.status(500).json({ error: 'All Gemini models failed. Last error: ' + lastError });
 }
