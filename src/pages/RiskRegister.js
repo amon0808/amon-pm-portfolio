@@ -4,6 +4,18 @@ const CATEGORIES = ["Risks", "Assumptions", "Issues", "Dependencies"];
 const CAT_ICONS = ["⚠️", "💭", "🔴", "🔗"];
 const CAT_COLORS = ["#e94560", "#ffd460", "#ff6b6b", "#00b4d8"];
 
+async function callAI(prompt) {
+  const res = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, max_tokens: 1500 }),
+  });
+  if (!res.ok) throw new Error("API error: " + res.status);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.text;
+}
+
 export default function RiskRegister() {
   const [loading, setLoading] = useState(false);
   const [raid, setRaid] = useState(null);
@@ -14,16 +26,11 @@ export default function RiskRegister() {
   const generate = async () => {
     setLoading(true); setError(null);
     try {
-      const prompt = "You are a senior Program Manager. Generate a comprehensive RAID log for: Project: " + form.project + ", Type: " + form.type + ", Timeline: " + form.timeline + ", Team: " + form.team + ", Context: " + (form.context || "None") + ". Return ONLY valid JSON (no markdown): {" + '"project_summary":"one sentence","risks":[{"id":"R01","description":"...","probability":"High","impact":"High","score":"High","mitigation":"...","owner":"...","status":"Open"},{"id":"R02","description":"...","probability":"Medium","impact":"High","score":"High","mitigation":"...","owner":"...","status":"Open"},{"id":"R03","description":"...","probability":"Low","impact":"Medium","score":"Low","mitigation":"...","owner":"...","status":"Open"},{"id":"R04","description":"...","probability":"High","impact":"Medium","score":"Medium","mitigation":"...","owner":"...","status":"Open"}],"assumptions":[{"id":"A01","description":"...","impact_if_wrong":"High","validation_date":"Week X","owner":"..."},{"id":"A02","description":"...","impact_if_wrong":"Medium","validation_date":"Week X","owner":"..."},{"id":"A03","description":"...","impact_if_wrong":"High","validation_date":"Week X","owner":"..."}],"issues":[{"id":"I01","description":"...","priority":"High","raised_by":"...","resolution":"...","status":"Open"},{"id":"I02","description":"...","priority":"Medium","raised_by":"...","resolution":"...","status":"Open"}],"dependencies":[{"id":"D01","description":"...","dependent_on":"...","due_date":"Week X","risk_if_late":"High"},{"id":"D02","description":"...","dependent_on":"...","due_date":"Week X","risk_if_late":"Medium"},{"id":"D03","description":"...","dependent_on":"...","due_date":"Week X","risk_if_late":"High"}]}' + "}";
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
-      });
-      const data = await res.json();
-      const text = data.content.map(i => i.text || "").join("");
-      setRaid(JSON.parse(text.replace(/```json|```/g, "").trim()));
-      setActiveTab(0);
-    } catch (e) { setError("Generation failed — please try again."); }
+      const prompt = "You are a senior Program Manager. Generate a comprehensive RAID log for: Project: " + form.project + ", Type: " + form.type + ", Timeline: " + form.timeline + ", Team: " + form.team + ", Context: " + (form.context || "None") + ". Return ONLY valid JSON: {\"project_summary\":\"one sentence\",\"risks\":[{\"id\":\"R01\",\"description\":\"...\",\"probability\":\"High\",\"impact\":\"High\",\"score\":\"High\",\"mitigation\":\"...\",\"owner\":\"...\",\"status\":\"Open\"},{\"id\":\"R02\",\"description\":\"...\",\"probability\":\"Medium\",\"impact\":\"High\",\"score\":\"High\",\"mitigation\":\"...\",\"owner\":\"...\",\"status\":\"Open\"},{\"id\":\"R03\",\"description\":\"...\",\"probability\":\"Low\",\"impact\":\"Medium\",\"score\":\"Low\",\"mitigation\":\"...\",\"owner\":\"...\",\"status\":\"Open\"}],\"assumptions\":[{\"id\":\"A01\",\"description\":\"...\",\"impact_if_wrong\":\"High\",\"validation_date\":\"Week 2\",\"owner\":\"...\"},{\"id\":\"A02\",\"description\":\"...\",\"impact_if_wrong\":\"Medium\",\"validation_date\":\"Week 1\",\"owner\":\"...\"}],\"issues\":[{\"id\":\"I01\",\"description\":\"...\",\"priority\":\"High\",\"raised_by\":\"...\",\"resolution\":\"...\",\"status\":\"Open\"}],\"dependencies\":[{\"id\":\"D01\",\"description\":\"...\",\"dependent_on\":\"...\",\"due_date\":\"Week 2\",\"risk_if_late\":\"High\"},{\"id\":\"D02\",\"description\":\"...\",\"dependent_on\":\"...\",\"due_date\":\"Week 3\",\"risk_if_late\":\"Medium\"}]}";
+      const text = await callAI(prompt);
+      const clean = text.replace(/^```json|^```|```$/gm, "").trim();
+      setRaid(JSON.parse(clean)); setActiveTab(0);
+    } catch (e) { setError("Generation failed: " + e.message + ". Please try again."); }
     setLoading(false);
   };
 
@@ -39,7 +46,6 @@ export default function RiskRegister() {
         </h1>
         <p style={{ color: "#8a8478", fontSize: 14, margin: 0 }}>Describe your project — get a fully populated RAID log with mitigation strategies.</p>
       </div>
-
       {!raid ? (
         <div style={{ background: "#111118", border: "1px solid #ffffff10", borderRadius: 16, padding: 40, maxWidth: 680, margin: "0 auto" }}>
           <div style={{ display: "grid", gap: 20 }}>
@@ -75,120 +81,31 @@ export default function RiskRegister() {
               <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, color: "#e8e4d9" }}>{form.project}</div>
               <div style={{ fontSize: 13, color: "#8a8478", marginTop: 4 }}>{raid.project_summary}</div>
             </div>
-            <button onClick={() => setRaid(null)}
-              style={{ padding: "9px 18px", background: "transparent", border: "1px solid #ffd46040", borderRadius: 8, color: "#ffd460", cursor: "pointer", fontSize: 13 }}>
-              ← New RAID Log
-            </button>
+            <button onClick={() => setRaid(null)} style={{ padding: "9px 18px", background: "transparent", border: "1px solid #ffd46040", borderRadius: 8, color: "#ffd460", cursor: "pointer", fontSize: 13 }}>← New RAID Log</button>
           </div>
-
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 24 }}>
             {CATEGORIES.map((cat, i) => {
               const d = [raid.risks, raid.assumptions, raid.issues, raid.dependencies][i];
               return (
-                <div key={i} onClick={() => setActiveTab(i)} style={{ background: "#111118", border: "1px solid " + (activeTab === i ? CAT_COLORS[i] : "#ffffff10"), borderRadius: 12, padding: "16px 20px", cursor: "pointer", transition: "all 0.2s" }}>
+                <div key={i} onClick={() => setActiveTab(i)} style={{ background: "#111118", border: "1px solid " + (activeTab === i ? CAT_COLORS[i] : "#ffffff10"), borderRadius: 12, padding: "16px 20px", cursor: "pointer" }}>
                   <div style={{ fontSize: 20, marginBottom: 6 }}>{CAT_ICONS[i]}</div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 24, color: CAT_COLORS[i], fontWeight: 500 }}>{d ? d.length : 0}</div>
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 24, color: CAT_COLORS[i] }}>{d ? d.length : 0}</div>
                   <div style={{ fontSize: 11, color: "#8a8478", letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 3 }}>{cat}</div>
                 </div>
               );
             })}
           </div>
-
           <div style={{ display: "flex", marginBottom: 16, background: "#111118", borderRadius: 10, border: "1px solid #ffffff10", overflow: "hidden" }}>
             {CATEGORIES.map((cat, i) => (
-              <button key={i} onClick={() => setActiveTab(i)}
-                style={{ flex: 1, padding: "11px 6px", background: activeTab === i ? CAT_COLORS[i] : "transparent", border: "none", borderRight: i < 3 ? "1px solid #ffffff10" : "none", color: activeTab === i ? (i === 1 ? "#0a0a0f" : "#fff") : "#8a8478", cursor: "pointer", fontSize: 12 }}>
+              <button key={i} onClick={() => setActiveTab(i)} style={{ flex: 1, padding: "11px 6px", background: activeTab === i ? CAT_COLORS[i] : "transparent", border: "none", borderRight: i < 3 ? "1px solid #ffffff10" : "none", color: activeTab === i ? (i === 1 ? "#0a0a0f" : "#fff") : "#8a8478", cursor: "pointer", fontSize: 12 }}>
                 {CAT_ICONS[i]} {cat}
               </button>
             ))}
           </div>
-
-          {activeTab === 0 && raid.risks && (
-            <div style={{ display: "grid", gap: 10 }}>
-              {raid.risks.map(r => (
-                <div key={r.id} style={{ background: "#111118", border: "1px solid #ffffff10", borderRadius: 12, padding: "16px 20px" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "60px 1fr 100px 100px 100px", gap: 16, alignItems: "center" }}>
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#e94560", background: "#e9456015", padding: "3px 8px", borderRadius: 4, textAlign: "center" }}>{r.id}</span>
-                    <div>
-                      <div style={{ color: "#e8e4d9", fontSize: 13, marginBottom: 5 }}>{r.description}</div>
-                      <div style={{ fontSize: 11, color: "#8a8478" }}>Mitigation: {r.mitigation}</div>
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 9, color: "#8a8478", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 3 }}>Probability</div>
-                      <span style={{ fontSize: 11, color: lC(r.probability), background: lC(r.probability) + "15", padding: "2px 8px", borderRadius: 4 }}>{r.probability}</span>
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 9, color: "#8a8478", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 3 }}>Impact</div>
-                      <span style={{ fontSize: 11, color: lC(r.impact), background: lC(r.impact) + "15", padding: "2px 8px", borderRadius: 4 }}>{r.impact}</span>
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 9, color: "#8a8478", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 3 }}>Score</div>
-                      <span style={{ fontSize: 11, color: lC(r.score), background: lC(r.score) + "20", border: "1px solid " + lC(r.score) + "40", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{r.score}</span>
-                    </div>
-                  </div>
-                  <div style={{ marginTop: 10, display: "flex", gap: 16, fontSize: 11, color: "#8a8478" }}>
-                    <span>Owner: <span style={{ color: "#c8c4b9" }}>{r.owner}</span></span>
-                    <span>Status: <span style={{ color: sC(r.status) }}>{r.status}</span></span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {activeTab === 1 && raid.assumptions && (
-            <div style={{ display: "grid", gap: 10 }}>
-              {raid.assumptions.map(a => (
-                <div key={a.id} style={{ background: "#111118", border: "1px solid #ffffff10", borderRadius: 12, padding: "14px 16px", display: "flex", gap: 16 }}>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#ffd460", background: "#ffd46015", padding: "3px 8px", borderRadius: 4, height: "fit-content" }}>{a.id}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: "#e8e4d9", fontSize: 13, marginBottom: 6 }}>{a.description}</div>
-                    <div style={{ display: "flex", gap: 16, fontSize: 11, color: "#8a8478", flexWrap: "wrap" }}>
-                      <span>If Wrong: <span style={{ color: lC(a.impact_if_wrong) }}>{a.impact_if_wrong}</span></span>
-                      <span>Validate: <span style={{ color: "#c8c4b9" }}>{a.validation_date}</span></span>
-                      <span>Owner: <span style={{ color: "#c8c4b9" }}>{a.owner}</span></span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {activeTab === 2 && raid.issues && (
-            <div style={{ display: "grid", gap: 10 }}>
-              {raid.issues.map(iss => (
-                <div key={iss.id} style={{ background: "#111118", border: "1px solid #ffffff10", borderRadius: 12, padding: "14px 16px", display: "flex", gap: 16 }}>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#ff6b6b", background: "#ff6b6b15", padding: "3px 8px", borderRadius: 4, height: "fit-content" }}>{iss.id}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: "#e8e4d9", fontSize: 13, marginBottom: 5 }}>{iss.description}</div>
-                    <div style={{ fontSize: 11, color: "#8a8478" }}>Resolution: {iss.resolution}</div>
-                    <div style={{ display: "flex", gap: 16, fontSize: 11, color: "#8a8478", marginTop: 8, flexWrap: "wrap" }}>
-                      <span>Priority: <span style={{ color: lC(iss.priority) }}>{iss.priority}</span></span>
-                      <span>Raised by: <span style={{ color: "#c8c4b9" }}>{iss.raised_by}</span></span>
-                      <span>Status: <span style={{ color: sC(iss.status) }}>{iss.status}</span></span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {activeTab === 3 && raid.dependencies && (
-            <div style={{ display: "grid", gap: 10 }}>
-              {raid.dependencies.map(d => (
-                <div key={d.id} style={{ background: "#111118", border: "1px solid #ffffff10", borderRadius: 12, padding: "14px 16px", display: "flex", gap: 16 }}>
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#00b4d8", background: "#00b4d815", padding: "3px 8px", borderRadius: 4, height: "fit-content" }}>{d.id}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: "#e8e4d9", fontSize: 13, marginBottom: 6 }}>{d.description}</div>
-                    <div style={{ display: "flex", gap: 16, fontSize: 11, color: "#8a8478", flexWrap: "wrap" }}>
-                      <span>Depends on: <span style={{ color: "#c8c4b9" }}>{d.dependent_on}</span></span>
-                      <span>Due: <span style={{ color: "#c8c4b9" }}>{d.due_date}</span></span>
-                      <span>Risk if late: <span style={{ color: lC(d.risk_if_late) }}>{d.risk_if_late}</span></span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {activeTab === 0 && raid.risks && <div style={{ display: "grid", gap: 10 }}>{raid.risks.map(r => (<div key={r.id} style={{ background: "#111118", border: "1px solid #ffffff10", borderRadius: 12, padding: "16px 20px" }}><div style={{ display: "grid", gridTemplateColumns: "60px 1fr 100px 100px 100px", gap: 16, alignItems: "center" }}><span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#e94560", background: "#e9456015", padding: "3px 8px", borderRadius: 4, textAlign: "center" }}>{r.id}</span><div><div style={{ color: "#e8e4d9", fontSize: 13, marginBottom: 5 }}>{r.description}</div><div style={{ fontSize: 11, color: "#8a8478" }}>Mitigation: {r.mitigation}</div></div><div style={{ textAlign: "center" }}><div style={{ fontSize: 9, color: "#8a8478", textTransform: "uppercase", marginBottom: 3 }}>Probability</div><span style={{ fontSize: 11, color: lC(r.probability), background: lC(r.probability) + "15", padding: "2px 8px", borderRadius: 4 }}>{r.probability}</span></div><div style={{ textAlign: "center" }}><div style={{ fontSize: 9, color: "#8a8478", textTransform: "uppercase", marginBottom: 3 }}>Impact</div><span style={{ fontSize: 11, color: lC(r.impact), background: lC(r.impact) + "15", padding: "2px 8px", borderRadius: 4 }}>{r.impact}</span></div><div style={{ textAlign: "center" }}><div style={{ fontSize: 9, color: "#8a8478", textTransform: "uppercase", marginBottom: 3 }}>Score</div><span style={{ fontSize: 11, color: lC(r.score), background: lC(r.score) + "20", border: "1px solid " + lC(r.score) + "40", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{r.score}</span></div></div><div style={{ marginTop: 10, display: "flex", gap: 16, fontSize: 11, color: "#8a8478" }}><span>Owner: <span style={{ color: "#c8c4b9" }}>{r.owner}</span></span><span>Status: <span style={{ color: sC(r.status) }}>{r.status}</span></span></div></div>))}</div>}
+          {activeTab === 1 && raid.assumptions && <div style={{ display: "grid", gap: 10 }}>{raid.assumptions.map(a => (<div key={a.id} style={{ background: "#111118", border: "1px solid #ffffff10", borderRadius: 12, padding: "14px 16px", display: "flex", gap: 16 }}><span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#ffd460", background: "#ffd46015", padding: "3px 8px", borderRadius: 4, height: "fit-content" }}>{a.id}</span><div style={{ flex: 1 }}><div style={{ color: "#e8e4d9", fontSize: 13, marginBottom: 6 }}>{a.description}</div><div style={{ display: "flex", gap: 16, fontSize: 11, color: "#8a8478", flexWrap: "wrap" }}><span>If Wrong: <span style={{ color: lC(a.impact_if_wrong) }}>{a.impact_if_wrong}</span></span><span>Validate: <span style={{ color: "#c8c4b9" }}>{a.validation_date}</span></span><span>Owner: <span style={{ color: "#c8c4b9" }}>{a.owner}</span></span></div></div></div>))}</div>}
+          {activeTab === 2 && raid.issues && <div style={{ display: "grid", gap: 10 }}>{raid.issues.map(iss => (<div key={iss.id} style={{ background: "#111118", border: "1px solid #ffffff10", borderRadius: 12, padding: "14px 16px", display: "flex", gap: 16 }}><span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#ff6b6b", background: "#ff6b6b15", padding: "3px 8px", borderRadius: 4, height: "fit-content" }}>{iss.id}</span><div style={{ flex: 1 }}><div style={{ color: "#e8e4d9", fontSize: 13, marginBottom: 5 }}>{iss.description}</div><div style={{ fontSize: 11, color: "#8a8478" }}>Resolution: {iss.resolution}</div><div style={{ display: "flex", gap: 16, fontSize: 11, color: "#8a8478", marginTop: 8, flexWrap: "wrap" }}><span>Priority: <span style={{ color: lC(iss.priority) }}>{iss.priority}</span></span><span>Raised by: <span style={{ color: "#c8c4b9" }}>{iss.raised_by}</span></span><span>Status: <span style={{ color: sC(iss.status) }}>{iss.status}</span></span></div></div></div>))}</div>}
+          {activeTab === 3 && raid.dependencies && <div style={{ display: "grid", gap: 10 }}>{raid.dependencies.map(d => (<div key={d.id} style={{ background: "#111118", border: "1px solid #ffffff10", borderRadius: 12, padding: "14px 16px", display: "flex", gap: 16 }}><span style={{ fontFamily: "'DM Mono', monospace", fontSize: 12, color: "#00b4d8", background: "#00b4d815", padding: "3px 8px", borderRadius: 4, height: "fit-content" }}>{d.id}</span><div style={{ flex: 1 }}><div style={{ color: "#e8e4d9", fontSize: 13, marginBottom: 6 }}>{d.description}</div><div style={{ display: "flex", gap: 16, fontSize: 11, color: "#8a8478", flexWrap: "wrap" }}><span>Depends on: <span style={{ color: "#c8c4b9" }}>{d.dependent_on}</span></span><span>Due: <span style={{ color: "#c8c4b9" }}>{d.due_date}</span></span><span>Risk if late: <span style={{ color: lC(d.risk_if_late) }}>{d.risk_if_late}</span></span></div></div></div>))}</div>}
         </div>
       )}
     </div>
